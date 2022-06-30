@@ -7,11 +7,11 @@ using System.Runtime.InteropServices;
 
 namespace AutoKVM
 {
-    class DisplayDDC
+    public class DisplayDDC
     {
         #region Members
 
-        internal struct MonitorSource
+        public struct MonitorSource
         {
             public int code;
             public string name;

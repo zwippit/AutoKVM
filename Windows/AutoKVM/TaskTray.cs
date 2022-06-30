@@ -18,6 +18,11 @@ namespace AutoKVM
         private List<DisplayDDC.MonitorSource[]> supportedMonitorSources;
 
         private Dictionary<IUSBDevice, List<ToolStripMenuItem>> usbDeviceMenus;
+        private Dictionary<HIDAPI.HIDDeviceInfo, ToolStripMenuItem> usbTriggerDevicesMenus;
+        private List<HIDAPI.HIDDeviceInfo> checkedUsbTriggerDevices;
+
+        private TriggerHappyService triggerHappyService;
+        BackgroundWorker backgroundWorker = null;
 
         private System.Timers.Timer doublePressTimer;
 
@@ -27,8 +32,10 @@ namespace AutoKVM
 
             AddMonitorsAndSources();
             AddUSBSwitches();
+            AddUSBDevicesForKVMTrigger();
             InitTimer();
             InterceptKeys.RegisterCallback(GlobalKeydownCallback);
+            //SetupBackgroundWorkerAndStart();
         }
 
         protected override void OnLoad(EventArgs e)
@@ -37,6 +44,33 @@ namespace AutoKVM
 
             this.ShowInTaskbar = false; 
             this.Visible = false;
+        }
+
+        private void SetupBackgroundWorkerAndStart()
+        {
+            backgroundWorker = new BackgroundWorker();
+            backgroundWorker.WorkerSupportsCancellation = true;
+            backgroundWorker.WorkerReportsProgress = true;
+            backgroundWorker.DoWork += BackgroundWorker_DoWork;
+            backgroundWorker.ProgressChanged += BackgroundWorker_ProgressChanged;
+            
+
+            backgroundWorker.RunWorkerAsync();
+        }
+
+        private void BackgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
+        {
+            if (triggerHappyService.TriggerDisplayCycle)
+            {
+                triggerHappyService.TriggerDisplayCycle = false;
+                CycleDisplays();                
+            }
+        }
+
+        private void BackgroundWorker_DoWork(object sender, DoWorkEventArgs e)
+        {
+            triggerHappyService = new TriggerHappyService(checkedUsbTriggerDevices,backgroundWorker);
+            triggerHappyService.Start();
         }
 
         private void AddMonitorsAndSources()
@@ -152,6 +186,62 @@ namespace AutoKVM
                 e.Cancel = true;
                 ((ToolStripDropDownMenu)sender).Invalidate();
             }
+        }
+
+        private void AddUSBDevicesForKVMTrigger()
+        {
+            checkedUsbTriggerDevices = new List<HIDAPI.HIDDeviceInfo>();
+            usbTriggerDevicesMenus = new Dictionary<HIDAPI.HIDDeviceInfo, ToolStripMenuItem>();
+
+            ToolStripMenuItem usbTriggerDevicesMenuItem = new ToolStripMenuItem("USB Trigger");
+            usbTriggerDevicesMenuItem.DropDown.Closing += new ToolStripDropDownClosingEventHandler(MonitorDropdownClosing);
+            contextMenuStrip1.Items.Insert(contextMenuStrip1.Items.Count - 1, usbTriggerDevicesMenuItem);
+
+            List<HIDAPI.HIDDeviceInfo> devices = HIDAPI.HIDEnumerate(0, 0);
+
+            var usbTriggerDevices = devices.OrderBy(o => o.product_string);//.Where(w => w.product_string.ToLower().Contains("trackball") || w.product_string.ToLower().Contains("mouse") || w.product_string.ToLower().Contains("keyboard"));
+            foreach (HIDAPI.HIDDeviceInfo usbTriggerDevice in usbTriggerDevices)
+            {
+                if (usbTriggerDevice.product_string == null)
+                    continue;
+                //IUSBDevice usbTriggerDeviceInstance = (IUSBDevice)Activator.CreateInstance(usbTriggerDevice);
+                if (usbTriggerDevice.product_string.ToLower().Contains("trackball") || usbTriggerDevice.product_string.ToLower().Contains("mouse") || usbTriggerDevice.product_string.ToLower().Contains("keyboard"))
+                {
+                    ToolStripMenuItem usbTriggerDeviceMenuItem = new ToolStripMenuItem(usbTriggerDevice.product_string);
+                    usbTriggerDeviceMenuItem.CheckOnClick = true;
+                    usbTriggerDeviceMenuItem.CheckedChanged += UsbTriggerDeviceMenuItem_CheckedChanged;
+                    if (!usbTriggerDevicesMenuItem.DropDownItems.ContainsKey(usbTriggerDevice.product_string))
+                    {
+                        usbTriggerDevicesMenuItem.DropDownItems.Add(usbTriggerDeviceMenuItem);
+                        usbTriggerDevicesMenus.Add(usbTriggerDevice, usbTriggerDeviceMenuItem);
+                    }
+                }
+            }
+             
+        }
+
+        private void UsbTriggerDeviceMenuItem_CheckedChanged(object sender, EventArgs e)
+        {
+            if (backgroundWorker != null)
+            {
+                backgroundWorker.CancelAsync();                
+            }
+
+            var usbTriggerDeviceMenuItem = (ToolStripMenuItem)sender;
+            var triggerDictionaryItem = usbTriggerDevicesMenus.SingleOrDefault(w => w.Value == usbTriggerDeviceMenuItem);            
+            if (usbTriggerDeviceMenuItem.Checked)
+            {
+                checkedUsbTriggerDevices.Add(triggerDictionaryItem.Key);
+            }
+            else
+            {
+                if (checkedUsbTriggerDevices.Contains(triggerDictionaryItem.Key))
+                {
+                    checkedUsbTriggerDevices.Remove(triggerDictionaryItem.Key);
+                }
+            }
+            SetupBackgroundWorkerAndStart();
+
         }
 
         private void AddUSBSwitches()

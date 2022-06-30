@@ -50,6 +50,7 @@
     <Compile Include="FailedToOpenDeviceException.cs" />
     <Compile Include="DeviceInfoAttribute.cs" />
     <Compile Include="DisplayDDC.cs" />
+    <Compile Include="TriggerHappyService.cs" />
     <None Include="Form1.cs" />
     <Compile Include="HIDAPI.cs" />
     <Compile Include="IUSBDevice.cs" />

@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 
 namespace AutoKVM
 {
-    class HIDAPI
+    public class HIDAPI
     {
         [StructLayout(LayoutKind.Sequential)]
         public class OVERLAPPED
